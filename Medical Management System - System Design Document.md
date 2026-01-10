@@ -3158,4 +3158,1158 @@ sequenceDiagram
     
     alt Has Result PDF/Image
         Lab Staff->>Frontend: Upload Result File
-        Fronten
+        Frontend->>API: POST /api/files/upload
+        API->>File Storage: Save File
+        File Storage-->>API: File URL
+    end
+    
+    Lab Staff->>Frontend: Submit Results
+    Frontend->>API: POST /api/lab-tests/{orderId}/results {resultData}
+    API->>Lab Test Service: SaveLabResultsAsync(orderId, resultDto)
+    
+    Lab Test Service->>Lab Test Service: Validate Results
+    Lab Test Service->>Database: BEGIN TRANSACTION
+    Lab Test Service->>Database: INSERT Lab Test Results
+    Lab Test Service->>Database: UPDATE Order Status = "Completed"
+    Lab Test Service->>Database: UPDATE ResultDate
+    Lab Test Service->>Database: COMMIT TRANSACTION
+    
+    Lab Test Service->>Notification Service: NotifyDoctorResultReady(orderId)
+    Note over Notification Service: V1.0: Creates notification record<br/>V2.0: Sends email/SMS
+    
+    Lab Test Service-->>API: Results Saved Successfully
+    API-->>Frontend: 200 OK
+    Frontend-->>Lab Staff: Success Message
+```
+
+---
+
+## 9. Flow Charts
+
+### 9.1 User Login & Authentication Flow
+
+```mermaid
+flowchart TD
+    A[Start: User Visits Login Page] --> B[Enter Email & Password]
+    B --> C[Click Login Button]
+    C --> D[Frontend Validates Input]
+    D --> E{Input Valid?}
+    
+    E -->|No| F[Show Validation Errors]
+    F --> B
+    
+    E -->|Yes| G[Send POST /api/auth/login]
+    G --> H[Backend Validates Credentials]
+    H --> I{User Exists?}
+    
+    I -->|No| J[Return 401 Unauthorized]
+    J --> K[Show "Invalid Credentials" Message]
+    K --> B
+    
+    I -->|Yes| L{Password Correct?}
+    
+    L -->|No| M[Increment Failed Login Attempts]
+    M --> N{Failed Attempts >= 5?}
+    N -->|Yes| O[Lock Account]
+    O --> P[Return "Account Locked" Error]
+    P --> Q[End]
+    
+    N -->|No| J
+    
+    L -->|Yes| R{Account Active?}
+    R -->|No| S[Return "Account Inactive" Error]
+    S --> K
+    
+    R -->|Yes| T[Reset Failed Login Attempts]
+    T --> U[Update Last Login Time]
+    U --> V[Generate JWT Token with Claims]
+    V --> W[Generate Refresh Token]
+    W --> X[Return Tokens + User Data]
+    X --> Y[Frontend Stores Tokens]
+    Y --> Z[Set Auth Header for Future Requests]
+    Z --> AA{User Role?}
+    
+    AA -->|Super Admin| AB[Redirect to Super Admin Dashboard]
+    AA -->|Org Admin| AC[Redirect to Admin Dashboard]
+    AA -->|Doctor| AD[Redirect to Doctor Dashboard]
+    AA -->|Nurse| AE[Redirect to Nurse Dashboard]
+    AA -->|Receptionist| AF[Redirect to Receptionist Dashboard]
+    AA -->|Billing Staff| AG[Redirect to Billing Dashboard]
+    AA -->|Patient| AH[Redirect to Patient Portal]
+    
+    AB --> Q
+    AC --> Q
+    AD --> Q
+    AE --> Q
+    AF --> Q
+    AG --> Q
+    AH --> Q
+```
+
+---
+
+### 9.2 Patient Registration Flow
+
+```mermaid
+flowchart TD
+    A[Start: Patient Arrives/Calls] --> B{Existing Patient?}
+    
+    B -->|Yes| C[Search Patient by Phone/Name/ID]
+    C --> D[Found Patient Record]
+    D --> E[Verify Patient Identity]
+    E --> F{Details Need Update?}
+    
+    F -->|Yes| G[Update Patient Information]
+    G --> H[Save Updated Record]
+    H --> I[Proceed to Appointment Booking]
+    
+    F -->|No| I
+    
+    B -->|No| J[Click "New Patient Registration"]
+    J --> K[Open Registration Form]
+    K --> L[Enter Basic Information]
+    Note over L: Name, DOB, Gender,<br/>Phone, Email, Address
+    
+    L --> M[Enter Medical Information]
+    Note over M: Blood Group, Allergies,<br/>Chronic Conditions,<br/>Current Medications
+    
+    M --> N[Enter Emergency Contact]
+    N --> O{Photo Available?}
+    O -->|Yes| P[Capture/Upload Photo]
+    O -->|No| Q[Skip Photo]
+    P --> R[Validate All Fields]
+    Q --> R
+    
+    R --> S{Validation Passed?}
+    S -->|No| T[Show Validation Errors]
+    T --> L
+    
+    S -->|Yes| U{Phone/Email Already Exists?}
+    U -->|Yes| V[Show Duplicate Warning]
+    V --> W{Continue Anyway?}
+    W -->|No| L
+    W -->|Yes| X[Create Patient Record]
+    
+    U -->|No| X
+    X --> Y[Generate Unique Patient ID]
+    Y --> Z[Save to Database]
+    Z --> AA[Display Patient ID to Staff]
+    AA --> AB[Provide Patient ID to Patient]
+    AB --> I
+    I --> AC[End]
+```
+
+---
+
+### 9.3 Appointment Scheduling Decision Flow
+
+```mermaid
+flowchart TD
+    A[Start: Schedule Appointment] --> B{Organization Type?}
+    
+    B -->|Personal Clinic| C[Single Doctor - Auto Select]
+    B -->|Multi-Doctor Clinic| D[Show Doctor List]
+    B -->|Hospital| E[Select Department First]
+    
+    C --> F[Load Doctor Schedule]
+    
+    D --> G[Receptionist Selects Doctor]
+    G --> F
+    
+    E --> H[Show Doctors in Department]
+    H --> G
+    
+    F --> I[Select Preferred Date]
+    I --> J[Fetch Available Time Slots]
+    J --> K{Slots Available?}
+    
+    K -->|No| L[Show Message: No Slots Available]
+    L --> M[Suggest Next Available Date]
+    M --> N{Accept Alternative?}
+    N -->|Yes| I
+    N -->|No| O[End - Appointment Not Booked]
+    
+    K -->|Yes| P[Display Available Time Slots]
+    P --> Q[Receptionist Selects Time Slot]
+    Q --> R[Enter Appointment Details]
+    Note over R: Reason for Visit,<br/>Appointment Type,<br/>Special Notes
+    
+    R --> S{Walk-in Patient?}
+    S -->|Yes| T[Mark as Walk-in]
+    T --> U[Assign Current Time]
+    U --> V[Add to Waiting Queue]
+    
+    S -->|No| W[Confirm Selected Time]
+    W --> X[Review Appointment Summary]
+    
+    V --> X
+    X --> Y{Details Correct?}
+    Y -->|No| R
+    
+    Y -->|Yes| Z[Click "Confirm Appointment"]
+    Z --> AA[Validate Slot Still Available]
+    AA --> AB{Still Available?}
+    
+    AB -->|No| AC[Show Error: Slot Taken]
+    AC --> J
+    
+    AB -->|Yes| AD[Create Appointment Record]
+    AD --> AE[Assign Token Number]
+    AE --> AF[Generate Appointment Confirmation]
+    AF --> AG{Print Appointment Slip?}
+    
+    AG -->|Yes| AH[Print Slip with Details]
+    AG -->|No| AI[Note Details Manually]
+    
+    AH --> AJ[Provide to Patient]
+    AI --> AJ
+    AJ --> AK[Update Doctor's Schedule]
+    AK --> AL[End - Appointment Confirmed]
+```
+
+---
+
+### 9.4 Medical Record Creation Workflow
+
+```mermaid
+flowchart TD
+    A[Start: Doctor Selects Patient] --> B[View Patient Summary]
+    B --> C[Check Recent Vitals]
+    C --> D{Vitals Recorded?}
+    
+    D -->|No| E[Request Nurse to Record Vitals]
+    E --> F[Wait for Vitals]
+    F --> C
+    
+    D -->|Yes| G[Review Medical History]
+    G --> H[Check Active Prescriptions]
+    H --> I[Check Known Allergies]
+    I --> J[Start Consultation]
+    J --> K[Update Appointment Status to "In Progress"]
+    K --> L[Click "Create Medical Record"]
+    L --> M[Enter Chief Complaint]
+    M --> N[Document Present Illness]
+    Note over N: Onset, Duration,<br/>Associated Symptoms,<br/>Severity
+    
+    N --> O[Record Physical Examination]
+    O --> P[Enter Diagnosis]
+    P --> Q[Search ICD-10 Code]
+    Q --> R[Select Appropriate Code]
+    R --> S{Need Lab Tests?}
+    
+    S -->|Yes| T[Click "Order Lab Tests"]
+    T --> U[Search Test Catalog]
+    U --> V[Select Required Tests]
+    V --> W[Add Clinical Indication]
+    W --> X[Confirm Lab Order]
+    
+    S -->|No| Y{Need Prescription?}
+    X --> Y
+    
+    Y -->|Yes| Z[Click "Add Prescription"]
+    Z --> AA[Search Medication Database]
+    AA --> AB[Select Medication]
+    AB --> AC[Enter Dosage Details]
+    Note over AC: Dosage, Frequency,<br/>Duration, Instructions
+    
+    AC --> AD{Check Drug Interactions}
+    AD --> AE{Interaction Found?}
+    
+    AE -->|Yes - Critical| AF[Show Warning Dialog]
+    AF --> AG{Override?}
+    AG -->|No| AA
+    AG -->|Yes| AH[Document Override Reason]
+    AH --> AI[Add Medication to Prescription]
+    
+    AE -->|No| AI
+    AE -->|Yes - Minor| AJ[Show Info Message]
+    AJ --> AI
+    
+    AI --> AK{Add More Medications?}
+    AK -->|Yes| AA
+    AK -->|No| AL[Review Complete Prescription]
+    
+    Y -->|No| AM[Add Treatment Plan]
+    AL --> AM
+    
+    AM --> AN[Add Doctor's Private Notes]
+    AN --> AO{Follow-up Needed?}
+    
+    AO -->|Yes| AP[Set Follow-up Date]
+    AP --> AQ[Add Follow-up Instructions]
+    AQ --> AR[Review Complete Medical Record]
+    
+    AO -->|No| AR
+    
+    AR --> AS{Everything Correct?}
+    AS -->|No| AT{What to Modify?}
+    AT -->|Complaints| M
+    AT -->|Examination| O
+    AT -->|Diagnosis| P
+    AT -->|Prescription| Z
+    AT -->|Treatment Plan| AM
+    
+    AS -->|Yes| AU[Click "Save Medical Record"]
+    AU --> AV[Validate All Required Fields]
+    AV --> AW{Validation Passed?}
+    
+    AW -->|No| AX[Show Validation Errors]
+    AX --> AR
+    
+    AW -->|Yes| AY[Save Medical Record to Database]
+    AY --> AZ[Update Appointment Status to "Completed"]
+    AZ --> BA[Trigger Invoice Generation]
+    BA --> BB[Generate Prescription PDF]
+    BB --> BC{Print Documents?}
+    
+    BC -->|Yes| BD[Print Medical Summary]
+    BD --> BE[Print Prescription]
+    BE --> BF[Print Lab Request Form if any]
+    
+    BC -->|No| BG[Make Available for Later Printing]
+    
+    BF --> BH[Provide Documents to Patient]
+    BG --> BH
+    BH --> BI[End - Consultation Complete]
+```
+
+---
+
+### 9.5 Invoice Generation & Payment Processing
+
+```mermaid
+flowchart TD
+    A[Start: Billing Staff View Pending Bills] --> B[Select Completed Consultation]
+    B --> C[Click "Generate Invoice"]
+    C --> D[System Fetches Medical Record]
+    D --> E[Load Consultation Fee]
+    E --> F{Lab Tests Ordered?}
+    
+    F -->|Yes| G[Add Lab Test Charges]
+    F -->|No| H{Procedures Done?}
+    G --> H
+    
+    H -->|Yes| I[Add Procedure Charges]
+    H -->|No| J[Calculate Subtotal]
+    I --> J
+    
+    J --> K{Apply Tax?}
+    K -->|Yes| L[Calculate Tax Amount]
+    L --> M[Add to Subtotal]
+    K -->|No| M
+    
+    M --> N[Calculate Total Amount]
+    N --> O[Display Invoice to Billing Staff]
+    O --> P{Patient Requests Discount?}
+    
+    P -->|Yes| Q{Staff Authorized for Discount?}
+    Q -->|No| R[Request Admin Approval]
+    R --> S{Approved?}
+    S -->|No| T[Proceed Without Discount]
+    S -->|Yes| U[Apply Discount]
+    
+    Q -->|Yes| U
+    U --> V[Enter Discount Reason]
+    V --> W[Recalculate Total]
+    W --> X[Update Invoice]
+    
+    P -->|No| T
+    T --> X
+    X --> Y[Review Invoice with Patient]
+    Y --> Z{Patient Agrees?}
+    
+    Z -->|No| AA[Discuss Invoice Items]
+    AA --> AB{Modify Invoice?}
+    AB -->|Yes| O
+    AB -->|No| AC[End - No Payment]
+    
+    Z -->|Yes| AD{Payment Method?}
+    
+    AD -->|Cash| AE[Enter Amount Received]
+    AE --> AF[Calculate Change]
+    AF --> AG[Accept Cash Payment]
+    AG --> AH[Record Payment in System]
+    AH --> AI{Change Due?}
+    AI -->|Yes| AJ[Return Change to Patient]
+    AI -->|No| AK[No Change]
+    AJ --> AL[Generate Receipt]
+    AK --> AL
+    
+    AD -->|Card| AM[Process on Card Machine]
+    AM --> AN{Transaction Approved?}
+    AN -->|No| AO[Show Error Message]
+    AO --> AP{Retry?}
+    AP -->|Yes| AM
+    AP -->|No| AD
+    
+    AN -->|Yes| AQ[Enter Transaction ID]
+    AQ --> AR[Enter Card Last 4 Digits]
+    AR --> AH
+    
+    AD -->|Check| AS[Receive Check from Patient]
+    AS --> AT[Enter Check Details]
+    Note over AT: Check Number,<br/>Bank Name,<br/>Check Date
+    AT --> AU[Verify Check Details]
+    AU --> AH
+    
+    AL --> AV[Update Invoice Status]
+    AV --> AW{Full Payment?}
+    AW -->|Yes| AX[Mark as "Paid"]
+    AW -->|No| AY[Mark as "Partially Paid"]
+    AX --> AZ[Record Outstanding = 0]
+    AY --> BA[Calculate Outstanding Balance]
+    
+    AZ --> BB[Print Receipt]
+    BA --> BB
+    BB --> BC[Print Invoice Copy if Requested]
+    BC --> BD[Provide Documents to Patient]
+    BD --> BE{Outstanding Balance?}
+    
+    BE -->|Yes| BF[Inform Patient of Balance]
+    BF --> BG[Schedule Follow-up for Payment]
+    BE -->|No| BH[Transaction Complete]
+    
+    BG --> BI[End]
+    BH --> BI
+```
+
+---
+
+### 9.6 System Deployment Mode Selection
+
+```mermaid
+flowchart TD
+    A[Start: System Installation] --> B{Deployment Type?}
+    
+    B -->|SaaS Multi-Tenant| C[Configure Multi-Tenant Mode]
+    C --> D[Set Configuration: DeploymentMode = "MultiTenant"]
+    D --> E[Enable Super Admin Features]
+    E --> F[Create Super Admin Account]
+    F --> G[Configure Subscription Management]
+    G --> H[Set Organization Limits]
+    H --> I[Configure Multi-Tenant Database]
+    I --> J[Apply Global Query Filters]
+    J --> K[Initialize Organization Context Middleware]
+    K --> L[Configure Cross-Tenant Security]
+    L --> M[System Ready for Multi-Tenant Use]
+    M --> N[Super Admin Can Create Organizations]
+    N --> O[End]
+    
+    B -->|Private Deployment| P[Configure Single-Tenant Mode]
+    P --> Q[Set Configuration: DeploymentMode = "Private"]
+    Q --> R[Disable Super Admin Features]
+    R --> S[Create Single Organization Record]
+    S --> T[Set OrganizationId as Fixed Value]
+    T --> U[Create Organization Admin Account]
+    U --> V[Grant Admin Full Permissions]
+    V --> W[Hide Subscription Management UI]
+    W --> X[Configure Single Organization Context]
+    X --> Y[Simplify Database Queries - Fixed OrgId]
+    Y --> Z[Remove Organization Switcher UI]
+    Z --> AA[System Ready for Private Use]
+    AA --> AB[Org Admin Manages Everything]
+    AB --> O
+```
+
+---
+
+## 10. Technical Implementation Details
+
+### 10.1 Technology Stack
+
+#### 10.1.1 Backend Technology Stack
+
+**Framework & Platform**:
+- **.NET 8.0** (LTS) - Latest long-term support version
+- **ASP.NET Core 8.0 Web API** - RESTful API framework
+- **C# 12** - Programming language
+
+**Architecture & Patterns**:
+- **Clean Architecture** (Onion Architecture)
+- **Repository Pattern** - Data access abstraction
+- **Unit of Work Pattern** - Transaction management
+- **CQRS Pattern** (Optional for complex operations)
+- **Dependency Injection** - Built-in .NET DI Container
+
+**Data Access**:
+- **Entity Framework Core 8.0** - ORM
+- **SQL Server 2022** - Primary database (also supports PostgreSQL)
+- **Manual Mapping** - No AutoMapper, custom DTOs
+- **FluentValidation** - Input validation
+- **Dapper** (Optional) - For complex queries and reporting
+
+**Authentication & Security**:
+- **JWT Bearer Tokens** - Authentication
+- **ASP.NET Core Identity** (Optional) - User management
+- **BCrypt.Net** - Password hashing
+- **Microsoft.AspNetCore.Authentication.JwtBearer** - JWT middleware
+
+**Caching**:
+- **StackExchange.Redis** - Distributed caching
+- **IMemoryCache** - In-memory caching for small data
+
+**Logging & Monitoring**:
+- **Serilog** - Structured logging
+- **Serilog.Sinks.File** - File logging
+- **Serilog.Sinks.MSSqlServer** - Database logging
+- **Serilog.Sinks.Console** - Console logging
+
+**API Documentation**:
+- **Swashbuckle.AspNetCore** (Swagger/OpenAPI) - API documentation
+- **Swagger UI** - Interactive API testing
+
+**Additional Libraries**:
+- **Newtonsoft.Json** - JSON serialization
+- **ClosedXML** - Excel generation for reports
+- **QuestPDF** - PDF generation
+- **System.Drawing.Common** - Image processing (patient photos)
+
+#### 10.1.2 Frontend Technology Stack
+
+**Framework**:
+- **Angular 17+** - Frontend framework
+- **TypeScript 5+** - Primary programming language
+- **RxJS 7+** - Reactive programming
+
+**UI Framework & Components**:
+- **Angular Material 17** - Primary UI component library
+- **PrimeNG** (Alternative) - Rich UI components
+- **Angular CDK** - Component development kit
+
+**State Management**:
+- **NgRx** - Redux-based state management (for complex state)
+- **Services with BehaviorSubject** - Simple state management
+- **LocalStorage** - Client-side data persistence
+
+**Forms**:
+- **Reactive Forms** - Form handling
+- **Custom Validators** - Form validation
+- **Template-driven Forms** (minimal use)
+
+**HTTP & Communication**:
+- **HttpClient** - HTTP communications
+- **HTTP Interceptors** - Request/response intercepting
+- **RxJS Operators** - Stream manipulation
+
+**Routing & Navigation**:
+- **Angular Router** - Application routing
+- **Route Guards** - Authentication guards
+- **Lazy Loading** - Module optimization
+
+**Additional Libraries**:
+- **Chart.js / ng2-charts** - Charts and graphs
+- **FullCalendar** - Calendar and scheduling
+- **ngx-pagination** - Pagination
+- **ngx-print** - Printing functionality
+- **ngx-toastr** - Toast notifications
+- **angular-file-uploader** - File uploads
+- **ngx-barcode** - Barcode generation
+- **date-fns** - Date manipulation
+
+**Development Tools**:
+- **Angular CLI** - Project scaffolding and building
+- **ESLint** - Code linting
+- **Prettier** - Code formatting
+- **Karma/Jasmine** - Unit testing
+- **Protractor/Cypress** - E2E testing
+
+#### 10.1.3 Database
+
+**Primary Database**:
+- **SQL Server 2022** (Recommended)
+- **PostgreSQL 15+** (Alternative)
+
+**Database Features Used**:
+- Transactions and ACID compliance
+- Foreign key constraints
+- Indexes for performance
+- Stored procedures (minimal, for complex reports)
+- Views for common queries
+- Full-text search (for patient/document search)
+
+#### 10.1.4 Infrastructure
+
+**Caching Layer**:
+- **Redis 7+** - Distributed cache
+- **Redis Commander** - Redis management UI (development)
+
+**Web Server**:
+- **IIS 10+** (Windows deployment)
+- **Nginx** (Linux deployment)
+- **Kestrel** (built-in .NET web server)
+
+**File Storage**:
+- **Local File System** - For private deployments
+- **Network Attached Storage (NAS)** - For larger deployments
+- **Azure Blob Storage** (Optional for cloud deployment)
+
+**Operating Systems**:
+- **Windows Server 2019/2022** - Windows deployment
+- **Ubuntu Server 22.04 LTS** - Linux deployment
+
+###10.2 Project Structure
+
+#### 10.2.1 Backend .NET Solution Structure
+
+```
+MedicalManagementSystem.sln
+│
+├── src/
+│   ├── MedicalSystem.API/                           # Presentation Layer - Web API
+│   │   ├── Controllers/
+│   │   │   ├── AuthController.cs
+│   │   │   ├── PatientsController.cs
+│   │   │   ├── AppointmentsController.cs
+│   │   │   ├── MedicalRecordsController.cs
+│   │   │   ├── PrescriptionsController.cs
+│   │   │   ├── LabTestsController.cs
+│   │   │   ├── InvoicesController.cs
+│   │   │   ├── PaymentsController.cs
+│   │   │   ├── UsersController.cs
+│   │   │   ├── OrganizationsController.cs
+│   │   │   └── ReportsController.cs
+│   │   ├── Middleware/
+│   │   │   ├── AuthenticationMiddleware.cs
+│   │   │   ├── TenantContextMiddleware.cs
+│   │   │   ├── ExceptionHandlingMiddleware.cs
+│   │   │   └── LoggingMiddleware.cs
+│   │   ├── Filters/
+│   │   │   ├── ValidateModelStateAttribute.cs
+│   │   │   └── AuthorizeRoleAttribute.cs
+│   │   ├── Extensions/
+│   │   │   ├── ServiceCollectionExtensions.cs
+│   │   │   └── ApplicationBuilderExtensions.cs
+│   │   ├── Program.cs
+│   │   ├── appsettings.json
+│   │   ├── appsettings.Development.json
+│   │   └── appsettings.Production.json
+│   │
+│   ├── MedicalSystem.Application/                   # Application Layer
+│   │   ├── Services/
+│   │   │   ├── AuthService.cs
+│   │   │   ├── PatientService.cs
+│   │   │   ├── AppointmentService.cs
+│   │   │   ├── MedicalRecordService.cs
+│   │   │   ├── PrescriptionService.cs
+│   │   │   ├── LabTestService.cs
+│   │   │   ├── BillingService.cs
+│   │   │   ├── InvoiceService.cs
+│   │   │   ├── PaymentService.cs
+│   │   │   ├── UserService.cs
+│   │   │   ├── OrganizationService.cs
+│   │   │   ├── DoctorScheduleService.cs
+│   │   │   ├── ReportService.cs
+│   │   │   └── FileStorageService.cs
+│   │   ├── Interfaces/
+│   │   │   ├── IAuthService.cs
+│   │   │   ├── IPatientService.cs
+│   │   │   ├── IAppointmentService.cs
+│   │   │   └── ... (other service interfaces)
+│   │   ├── DTOs/
+│   │   │   ├── Auth/
+│   │   │   │   ├── LoginRequestDto.cs
+│   │   │   │   ├── LoginResponseDto.cs
+│   │   │   │   └── TokenDto.cs
+│   │   │   ├── Patient/
+│   │   │   │   ├── PatientDto.cs
+│   │   │   │   ├── CreatePatientDto.cs
+│   │   │   │   └── UpdatePatientDto.cs
+│   │   │   ├── Appointment/
+│   │   │   ├── MedicalRecord/
+│   │   │   ├── Prescription/
+│   │   │   ├── Billing/
+│   │   │   └── Common/
+│   │   │       └── PagedResultDto.cs
+│   │   ├── Mappers/                                  # Manual Mapping
+│   │   │   ├── PatientMapper.cs
+│   │   │   ├── AppointmentMapper.cs
+│   │   │   ├── MedicalRecordMapper.cs
+│   │   │   └── ... (other mappers)
+│   │   ├── Validators/                               # FluentValidation
+│   │   │   ├── CreatePatientDtoValidator.cs
+│   │   │   ├── CreateAppointmentDtoValidator.cs
+│   │   │   └── ... (other validators)
+│   │   └── Exceptions/
+│   │       ├── BusinessException.cs
+│   │       ├── NotFoundException.cs
+│   │       └── ValidationException.cs
+│   │
+│   ├── MedicalSystem.Domain/                         # Domain Layer
+│   │   ├── Entities/
+│   │   │   ├── Organization.cs
+│   │   │   ├── User.cs
+│   │   │   ├── Patient.cs
+│   │   │   ├── Appointment.cs
+│   │   │   ├── MedicalRecord.cs
+│   │   │   ├── VitalSigns.cs
+│   │   │   ├── Diagnosis.cs
+│   │   │   ├── Prescription.cs
+│   │   │   ├── PrescriptionItem.cs
+│   │   │   ├── Medication.cs
+│   │   │   ├── LabTestOrder.cs
+│   │   │   ├── LabTestResult.cs
+│   │   │   ├── LabTest.cs
+│   │   │   ├── Invoice.cs
+│   │   │   ├── InvoiceItem.cs
+│   │   │   ├── Payment.cs
+│   │   │   ├── Service.cs
+│   │   │   ├── Department.cs
+│   │   │   ├── UserSchedule.cs
+│   │   │   ├── AuditLog.cs
+│   │   │   └── BaseEntity.cs
+│   │   ├── Enums/
+│   │   │   ├── UserRole.cs
+│   │   │   ├── OrganizationType.cs
+│   │   │   ├── AppointmentStatus.cs
+│   │   │   ├── InvoiceStatus.cs
+│   │   │   ├── PaymentMethod.cs
+│   │   │   ├── Gender.cs
+│   │   │   └── DayOfWeek.cs
+│   │   ├── ValueObjects/
+│   │   │   ├── Address.cs
+│   │   │   └── ContactInfo.cs
+│   │   ├── Interfaces/
+│   │   │   ├── IRepository.cs
+│   │   │   ├── IPatientRepository.cs
+│   │   │   ├── IAppointmentRepository.cs
+│   │   │   └── ... (other repository interfaces)
+│   │   └── Exceptions/
+│   │       └── DomainException.cs
+│   │
+│   ├── MedicalSystem.Infrastructure/                 # Infrastructure Layer
+│   │   ├── Data/
+│   │   │   ├── ApplicationDbContext.cs
+│   │   │   ├── Configurations/
+│   │   │   │   ├── OrganizationConfiguration.cs
+│   │   │   │   ├── UserConfiguration.cs
+│   │   │   │   ├── PatientConfiguration.cs
+│   │   │   │   └── ... (other entity configurations)
+│   │   │   ├── Interceptors/
+│   │   │   │   └── AuditInterceptor.cs
+│   │   │   └── Migrations/
+│   │   ├── Repositories/
+│   │   │   ├── GenericRepository.cs
+│   │   │   ├── PatientRepository.cs
+│   │   │   ├── AppointmentRepository.cs
+│   │   │   ├── MedicalRecordRepository.cs
+│   │   │   └── ... (other repositories)
+│   │   ├── Services/
+│   │   │   ├── TokenService.cs
+│   │   │   ├── CacheService.cs
+│   │   │   ├── EmailService.cs                      # V2.0
+│   │   │   └── SmsService.cs                        # V2.0
+│   │   └── UnitOfWork/
+│   │       └── UnitOfWork.cs
+│   │
+│   └── MedicalSystem.Shared/                         # Shared/Common
+│       ├── Constants/
+│       │   ├── AppConstants.cs
+│       │   ├── RoleConstants.cs
+│       │   └── CacheKeys.cs
+│       ├── Helpers/
+│       │   ├── PasswordHasher.cs
+│       │   ├── DateTimeHelper.cs
+│       │   └── FileHelper.cs
+│       └── Extensions/
+│           ├── StringExtensions.cs
+│           └── EnumExtensions.cs
+│
+└── tests/                                             # Test Projects
+    ├── MedicalSystem.UnitTests/
+    ├── MedicalSystem.IntegrationTests/
+    └── MedicalSystem.API.Tests/
+```
+
+#### 10.2.2 Frontend Angular Structure
+
+```
+medical-system-frontend/
+│
+├── src/
+│   ├── app/
+│   │   ├── core/                                     # Singleton Services
+│   │   │   ├── services/
+│   │   │   │   ├── auth.service.ts
+│   │   │   │   ├── api.service.ts
+│   │   │   │   ├── token.service.ts
+│   │   │   │   ├── tenant.service.ts
+│   │   │   │   └── notification.service.ts
+│   │   │   ├── guards/
+│   │   │   │   ├── auth.guard.ts
+│   │   │   │   └── role.guard.ts
+│   │   │   ├── interceptors/
+│   │   │   │   ├── auth.interceptor.ts
+│   │   │   │   ├── error.interceptor.ts
+│   │   │   │   └── loading.interceptor.ts
+│   │   │   ├── models/
+│   │   │   │   ├── user.model.ts
+│   │   │   │   ├── auth-response.model.ts
+│   │   │   │   └── api-response.model.ts
+│   │   │   └── core.module.ts
+│   │   │
+│   │   ├── shared/            # Shared Components & Modules
+│   │   │   ├── components/
+│   │   │   │   ├── header/
+│   │   │   │   ├── sidebar/
+│   │   │   │   ├── footer/
+│   │   │   │   ├── loading-spinner/
+│   │   │   │   ├── confirmation-dialog/
+│   │   │   │   ├── data-table/
+│   │   │   │   └── page-header/
+│   │   │   ├── directives/
+│   │   │   │   ├── has-role.directive.ts
+│   │   │   │   └── auto-focus.directive.ts
+│   │   │   ├── pipes/
+│   │   │   │   ├── age.pipe.ts
+│   │   │   │   ├── date-format.pipe.ts
+│   │   │   │   └── currency-format.pipe.ts
+│   │   │   ├── validators/
+│   │   │   │   └── custom-validators.ts
+│   │   │   └── shared.module.ts
+│   │   │
+│   │   ├── features/                                 # Feature Modules
+│   │   │   ├── auth/
+│   │   │   │   ├── login/
+│   │   │   │   ├── forgot-password/
+│   │   │   │   └── auth-routing.module.ts
+│   │   │   │
+│   │   │   ├── dashboard/
+│   │   │   │   ├── admin-dashboard/
+│   │   │   │   ├── doctor-dashboard/
+│   │   │   │   ├── receptionist-dashboard/
+│   │   │   │   └── dashboard-routing.module.ts
+│   │   │   │
+│   │   │   ├── patients/
+│   │   │   │   ├── patient-list/
+│   │   │   │   ├── patient-detail/
+│   │   │   │   ├── patient-create/
+│   │   │   │   ├── patient-edit/
+│   │   │   │   ├── patient-history/
+│   │   │   │   ├── services/
+│   │   │   │   │   └── patient.service.ts
+│   │   │   │   ├── models/
+│   │   │   │   │   └── patient.model.ts
+│   │   │   │   └── patients-routing.module.ts
+│   │   │   │
+│   │   │   ├── appointments/
+│   │   │   │   ├── appointment-list/
+│   │   │   │   ├── appointment-calendar/
+│   │   │   │   ├── appointment-create/
+│   │   │   │   ├── appointment-detail/
+│   │   │   │   ├── doctor-schedule/
+│   │   │   │   ├── services/
+│   │   │   │   │   └── appointment.service.ts
+│   │   │   │   └── appointments-routing.module.ts
+│   │   │   │
+│   │   │   ├── medical-records/
+│   │   │   │   ├── medical-record-list/
+│   │   │   │   ├── medical-record-create/
+│   │   │   │   ├── medical-record-detail/
+│   │   │   │   ├── vital-signs/
+│   │   │   │   ├── diagnosis/
+│   │   │   │   ├── services/
+│   │   │   │   │   └── medical-record.service.ts
+│   │   │   │   └── medical-records-routing.module.ts
+│   │   │   │
+│   │   │   ├── prescriptions/
+│   │   │   │   ├── prescription-create/
+│   │   │   │   ├── prescription-detail/
+│   │   │   │   ├── prescription-history/
+│   │   │   │   ├── services/
+│   │   │   │   │   └── prescription.service.ts
+│   │   │   │   └── prescriptions-routing.module.ts
+│   │   │   │
+│   │   │   ├── lab-tests/
+│   │   │   │   ├── lab-test-list/
+│   │   │   │   ├── lab-test-order/
+│   │   │   │   ├── lab-test-results/
+│   │   │   │   ├── services/
+│   │   │   │   │   └── lab-test.service.ts
+│   │   │   │   └── lab-tests-routing.module.ts
+│   │   │   │
+│   │   │   ├── billing/
+│   │   │   │   ├── invoice-list/
+│   │   │   │   ├── invoice-create/
+│   │   │   │   ├── invoice-detail/
+│   │   │   │   ├── payment-record/
+│   │   │   │   ├── services/
+│   │   │   │   │   ├── invoice.service.ts
+│   │   │   │   │   └── payment.service.ts
+│   │   │   │   └── billing-routing.module.ts
+│   │   │   │
+│   │   │   ├── reports/
+│   │   │   │   ├── financial-reports/
+│   │   │   │   ├── patient-reports/
+│   │   │   │   ├── appointment-reports/
+│   │   │   │   ├── services/
+│   │   │   │   │   └── report.service.ts
+│   │   │   │   └── reports-routing.module.ts
+│   │   │   │
+│   │   │   ├── administration/
+│   │   │   │   ├── user-management/
+│   │   │   │   ├── organization-settings/
+│   │   │   │   ├── department-management/
+│   │   │   │   ├── service-pricing/
+│   │   │   │   ├── services/
+│   │   │   │   │   ├── user.service.ts
+│   │   │   │   │   └── organization.service.ts
+│   │   │   │   └── administration-routing.module.ts
+│   │   │   │
+│   │   │   └── super-admin/                          # SaaS Only
+│   │   │       ├── organization-list/
+│   │   │       ├── organization-create/
+│   │   │       ├── subscription-management/
+│   │   │       ├── services/
+│   │   │       │   └── super-admin.service.ts
+│   │   │       └── super-admin-routing.module.ts
+│   │   │
+│   │   ├── layout/                                   # Layout Components
+│   │   │   ├── main-layout/
+│   │   │   ├── auth-layout/
+│   │   │   └── print-layout/
+│   │   │
+│   │   ├── app-routing.module.ts
+│   │   ├── app.component.ts
+│   │   └── app.module.ts
+│   │
+│   ├── assets/
+│   │   ├── images/
+│   │   ├── icons/
+│   │   ├── styles/
+│   │   └── i18n/                                     # V2.0
+│   │
+│   ├── environments/
+│   │   ├── environment.ts
+│   │   ├── environment.development.ts
+│   │   └── environment.production.ts
+│   │
+│   ├── styles.scss
+│   ├── index.html
+│   └── main.ts
+│
+├── angular.json
+├── package.json
+├── tsconfig.json
+└── README.md
+```
+
+### 10.3 Configuration Management
+
+#### 10.3.1 Backend Configuration (appsettings.json)
+
+```json
+{
+  "DeploymentSettings": {
+    "Mode": "MultiTenant",  // or "Private"
+    "EnableSuperAdmin": true,
+    "OrganizationLimit": 100,
+    "DefaultOrganizationId": null  // Set for Private mode
+  },
+  "ConnectionStrings": {
+    "DefaultConnection": "Server=localhost;Database=MedicalSystemDb;Trusted_Connection=True;TrustServerCertificate=True",
+    "RedisConnection": "localhost:6379"
+  },
+  "JwtSettings": {
+    "SecretKey": "YOUR_SECRET_KEY_HERE_MINIMUM_32_CHARACTERS",
+    "Issuer": "MedicalSystem",
+    "Audience": "MedicalSystemUsers",
+    "TokenExpirationMinutes": 60,
+    "RefreshTokenExpirationDays": 7
+  },
+  "CacheSettings": {
+    "DefaultExpirationMinutes": 30,
+    "UserSessionExpirationMinutes": 60,
+    "OrganizationSettingsExpirationHours": 24
+  },
+  "FileStorage": {
+    "StorageType": "Local",  // or "Network" or "AzureBlob" (V2.0)
+    "LocalPath": "C:\\MedicalSystemFiles",
+    "MaxFileSizeMB": 10,
+    "AllowedExtensions": [".jpg", ".jpeg", ".png", ".pdf", ".docx"]
+  },
+  "SecuritySettings": {
+    "MaxFailedLoginAttempts": 5,
+    "AccountLockoutMinutes": 30,
+    "PasswordMinLength": 8,
+    "PasswordRequireUppercase": true,
+    "PasswordRequireDigit": true,
+    "PasswordRequireSpecialChar": true
+  },
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning"
+    },
+    "Serilog": {
+      "MinimumLevel": "Information",
+      "WriteTo": [
+        { "Name": "Console" },
+        { "Name": "File", "Args": { "path": "Logs/log-.txt", "rollingInterval": "Day" } }
+      ]
+    }
+  },
+  "AllowedHosts": "*"
+}
+```
+
+#### 10.3.2 Frontend Configuration (environment.ts)
+
+```typescript
+export const environment = {
+  production: false,
+  apiUrl: 'https://localhost:7001/api',
+  apiTimeout: 30000,
+  cacheExpirationMinutes: 30,
+  dateFormat: 'dd/MM/yyyy',
+  timeFormat: 'HH:mm',
+  currency: 'USD',
+  paginationPageSize: 10,
+  paginationPageSizeOptions: [10, 25, 50, 100],
+  maxFileUploadSizeMB: 10,
+  allowedFileTypes: ['.jpg', '.jpeg', '.png', '.pdf'],
+  sessionTimeoutMinutes: 60,
+  enableDebugMode: true
+};
+```
+
+### 10.4 Database Configuration & Strategy
+
+#### 10.4.1 Connection String Format
+
+**SQL Server**:
+```
+Server=localhost;Database=MedicalSystemDb;User Id=sa;Password=YourPassword;TrustServerCertificate=True;
+```
+
+**PostgreSQL**:
+```
+Host=localhost;Database=medicalsystemdb;Username=postgres;Password=YourPassword
+```
+
+#### 10.4.2 Entity Framework Core Configuration Strategy
+
+**Global Query Filter for Multi-Tenancy**:
+```
+Applied to all entities with OrganizationId property
+Automatically filters all queries by current tenant context
+Cannot be bypassed without explicit IgnoreQueryFilters() call
+```
+
+**Audit Fields on All Entities**:
+```
+CreatedAt: DateTime (automatically set on insert)
+UpdatedAt: DateTime (automatically set on update)
+CreatedBy: int? (user ID who created)
+UpdatedBy: int? (user ID who last updated)
+```
+
+**Soft Delete Strategy**:
+```
+IsActive/IsDeleted boolean field on entities
+Never physically delete records (except for GDPR compliance requests)
+Filter out deleted records in queries
+```
+
+### 10.5 API Endpoint Structure
+
+**Base URL**: `https://api.medicalsystem.com/api` (or configured domain)
+
+**Endpoint Naming Convention**:
+```
+GET    /api/{resource}                    # Get all (paginated)
+GET    /api/{resource}/{id}               # Get by ID
+POST   /api/{resource}                    # Create
+PUT    /api/{resource}/{id}               # Update (full)
+PATCH  /api/{resource}/{id}               # Update (partial)
+DELETE /api/{resource}/{id}               # Delete (soft)
+GET    /api/{resource}/search?query={}    # Search
+GET    /api/{resource}/{id}/{sub-resource}  # Nested resources
+```
+
+### 10.6 Manual Mapping Strategy
+
+**Reason for Manual Mapping**: Avoids AutoMapper dependency, provides explicit control, better performance
+
+**Mapping Location**: `Application Layer -> Mappers folder`
+
+**Example Mapper Pattern**:
+```
+PatientMapper.cs:
+- ToDto(Patient entity) -> PatientDto
+- ToEntity(CreatePatientDto dto) -> Patient
+- ToEntity(UpdatePatientDto dto, Patient existing) -> Patient
+- ToDtoList(List<Patient> entities) -> List<PatientDto>
+```
+
+### 10.7 FluentValidation Strategy
+
+**Validator Location**: `Application Layer -> Validators folder`
+
+**Validation Rules**:
+- Required fields
+- Length constraints
+- Format validation (email, phone)
+- Business rules
+- Cross-field validation
+
+**Example Validator**:
+```
+CreatePatientDtoValidator:
+- FirstName: Required, MaxLength 100
+- LastName: Required, MaxLength 100
+- DateOfBirth: Required, Must be past date
+- Phone: Required, Valid phone format
+- Email: Optional, Valid email format
+```
+
+### 10.8 Error Handling Strategy
+
+**Exception Hierarchy**:
+1. BusinessException - Business rule violations
+2. NotFoundException - Resource not found
+3. ValidationException - Input validation failures
+4. UnauthorizedException - Authentication failures
+5. ForbiddenException - Authorization failures
+
+**Error Response Format**:
+```json
+{
+  "statusCode": 400,
+  "message": "Validation failed",
+  "errors": [
+    {
+      "field": "Email",
+      "message": "Email is required"
+    }
+  ],
+  "timestamp": "2026-01-10T10:30:00Z"
+}
+```
+
+### 10.9 Deployment Considerations
+
+#### Single Server Deployment (Small Clinics):
+- Windows Server 2019+ or Ubuntu 22.04+
+- 8GB RAM minimum
+- 4 CPU cores
+- 100GB SSD storage
+- IIS or Nginx
+- SQL Server Express or PostgreSQL
+- Redis (optional for small deployments)
+
+#### Two-Tier Deployment (Medium Clinics):
+- Application Server: 8GB RAM, 4 cores
+- Database Server: 16GB RAM, 4 cores
+- Separate Redis server (optional)
+
+#### Scaled Deployment (Hospitals / SaaS):
+- Multiple application servers behind load balancer
+- Dedicated database server with replicas
+- Dedicated Redis cluster
+- Separate file storage server
+
+---
+
+**End of System Design Document**
+
+This comprehensive document covers all aspects of the Medical Management System design for Version 1.0, focusing on monolithic architecture with clean code principles, manual mapping, FluentValidation, and support for both SaaS multi-tenant and private deployment models without external service dependencies in the initial version.
